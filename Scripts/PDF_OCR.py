@@ -11,56 +11,12 @@ import pandas as pd
 import os
 import numpy as np
 import shutil
-import string
+
 states = ['AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA', 'HI', 'ID',
           'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS',
           'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 'NM', 'NY', 'NC', 'ND', 'OH', 'OK',
           'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'MV',
           'WI', 'WY']
-def check_if_all_numbers(line):
-    try:
-        if re.findall('\d*\.', line)[0] == line:
-            return False
-    except:
-        pass
-    return True
-def addres_cleaner(group):
-    group = [line.replace('\n','') for line in group]
-    remove_items = list()
-    def remove_characters(line):
-        for ch in line:
-            if ch in string.ascii_uppercase:
-                line = line[line.index(ch):]
-                for item in remove_items:
-                    group.remove(item)
-                return line
-        return False
-
-    for line in group:
-        if len(line)<6:
-            remove_items.append(line)
-            continue
-        Line = remove_characters(line)
-        if Line:
-            try:
-                group.remove(line)
-            except:pass
-            group.insert(0,Line)
-            for item in remove_items:
-                try:
-                    group.remove(item)
-                except:pass
-
-            group  = [line for line in group if 'EXHIBIT' not in line and check_if_all_numbers(line) ]
-
-            return group
-def anyexists(states, line):
-    for st in states:
-        if st in line:
-            if ' '+st+' ' in line:
-                return True
-    return False
-
 
 
 class PDF:
@@ -100,7 +56,7 @@ class PDF:
     def textPDF_to_text(self):
 
         for i in range(self.number_of_pages):
-            fp = open('{}//{}_{}.pdf'.format(self.temp_folder_name, self.file_name, i), 'rb',encoding='utf-8')
+            fp = open('{}//{}_{}.pdf'.format(self.temp_folder_name, self.file_name, i), 'rb')
 
             rsrcmgr = PDFResourceManager()
             retstr = io.StringIO()
@@ -115,7 +71,7 @@ class PDF:
                 interpreter.process_page(page)
                 text = retstr.getvalue()
 
-            textfile = open('{}//{}_{}.txt'.format(self.temp_folder_name, self.file_name, i), 'w',encoding='utf-8')
+            textfile = open('{}//{}_{}.txt'.format(self.temp_folder_name, self.file_name, i), 'w')
             textfile.write(text)
             textfile.close()
 
@@ -135,9 +91,10 @@ class TextFile:
         self.file_name = file_name
 
     def read_lines(self):
-        txt = open(self.file_name, 'r',encoding='utf-8').readlines()
+        txt = open(self.file_name, 'r', encoding='utf-8').readlines()
         return txt
 
+    # This method is customized to specific files
     def raw_file_corrector(self, lines):
 
         # Remove '=' from lines
@@ -179,31 +136,29 @@ class TextFile:
 
 
         # Print lines
+        for line in lines:
+            print(line)
 
         return lines
 
     def get_text_groups(self, lines, number_of_lines, line_max_length):
-        new_line_indices = [i for i, e in enumerate(lines) if  anyexists(states,lines[i])]
+        min_number_lines, max_number_lines = number_of_lines
+        new_line_indices = [i for i, e in enumerate(lines) if e == '\n']
 
-        if not new_line_indices: return new_line_indices
-        starting = new_line_indices[0]
-        while True:
-            try:
-                starting-=2
-                if lines[starting][0]  in '0123456789':
-                    new_line_indices.insert(0,starting)
-                    break
-            except:break
         groups = []
-        for i in range(len(new_line_indices)-1):
-            if i ==0:
-                group = lines[new_line_indices[i]:new_line_indices[i+1]+1]
-                if '\n' in group: group=list(filter(lambda item: item != '\n', group))
-                groups.append(addres_cleaner(group))
-            else:
-                group = lines[new_line_indices[i]+1:new_line_indices[i+1]+1]
-                if '\n' in group: group=list(filter(lambda item: item != '\n', group))
-                groups.append(addres_cleaner(group))
+        for i in range(len(new_line_indices) - 1):
+            if min_number_lines + 1 <= new_line_indices[i + 1] - new_line_indices[i] <= max_number_lines + 1:
+                group = lines[new_line_indices[i] + 1: new_line_indices[i + 1]]
+
+                # Remove \n from the end of each line
+                group = [item[:-1] for item in group]
+
+                # Check line length in each group
+                lengths_of_lines = [len(line) for line in group]
+
+                if max(lengths_of_lines) <= line_max_length:
+                    groups.append(group)
+
         return groups
 
     def concatenate_groups(self, groups):
@@ -218,6 +173,7 @@ class TextFile:
         P.O. Box 12787
         Austin, TX 78711
         '''
+
         states = ['AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA', 'HI', 'ID',
                   'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS',
                   'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 'NM', 'NY', 'NC', 'ND', 'OH', 'OK',
@@ -237,7 +193,6 @@ class TextFile:
 
             # Checks
             # Check for Zipcode, State, City
-            if not group: continue
             for line in group:
                 line = line.strip()
                 group_check = False
@@ -286,7 +241,8 @@ class TextFile:
                     group.remove(line)
 
                 elif ('Ste.' or 'STE.') in line:
-
+                    if ',' not in line:
+                        print(line)
                     comma_index = line.index(',')
                     Address1 = line[:comma_index]
                     Address2 = line[comma_index + 2:]
@@ -313,12 +269,9 @@ class TextFile:
             ResCompanyName = ' '.join(group)
 
             if group_check == True:
-
                 group_data = [ResCompanyName, ResFirstName, ResLastName, Address1, Address2, City, State, Zipcode]
-                try:
-                    group_data = [item[1:] if item != None and item[0] == '-' else item for item in group_data]
-                except:
-                    pass
+                print(group_data)
+                group_data = [item[1:] if item != None and item[0] == '-' else item for item in group_data]
                 groups_data.append(group_data)
 
         return groups_data
@@ -334,13 +287,15 @@ def concatenate_CSVs(folder_name):
         output_file_name = '{}.csv'.format(folder_name)
 
         if item.split('.')[1] == 'csv':
+            print(item, folder_name)
+            print('concatenating: ... ', int(i / 4))
             if i == 0:
                 df = pd.read_csv('{}//{}'.format(folder_name, item))
                 create_csv(output_file_name, df,
                            columns=['ResCompanyName', 'ResFirstName', 'ResLastName', 'Address1', 'Address2', 'City',
                                     'State', 'Zipcode'])
             else:
-                with open(output_file_name, 'a',encoding='utf-8') as f:
+                with open(output_file_name, 'a') as f:
                     df = pd.read_csv('{}//{}'.format(folder_name, item))
                     df.to_csv(f, header=False, index=False)
                     f.close()
@@ -355,10 +310,12 @@ def concatenate_CSVs(folder_name):
 
 
 def get_pdf():
-    cwd = os.getcwd()
+    # cwd = os.getcwd()
+    cwd = os.path.abspath(os.pardir)
     PDFs = os.listdir(cwd)
-
     pdfs = []
+
+
     for pdf in PDFs:
         try:
             if pdf.split('.')[1] == 'pdf':
@@ -368,11 +325,11 @@ def get_pdf():
 
     return (pdfs[0])
 
-
-
+## pdf_file.image_to_textPDF()
+## pdf_file.textPDF_to_text()
 
 if __name__ == '__main__':
-    # Process the PDF
+    # # Process the PDF
     read_pdf_file = get_pdf()
     pdf_file = PDF(read_pdf_file)
     pdf_file.PDF_to_images()
@@ -386,9 +343,10 @@ if __name__ == '__main__':
         if item.endswith('txt'):
             txt_file = TextFile('{}//{}'.format(folder_name, item))
             lines = txt_file.read_lines()
-            # corrected_lines = txt_file.raw_file_corrector(lines)
-            lines = [line.replace('=','') if '=' in line else line for line in lines]
-            groups = txt_file.get_text_groups(lines, [3, 8], 50)
+
+            corrected_lines = txt_file.raw_file_corrector(lines)
+
+            groups = txt_file.get_text_groups(corrected_lines, [3, 8], 50)
             data = txt_file.get_company_data(groups)
             final_csv_file_name = '{}//{}.csv'.format(folder_name, item.split('.')[0])
             create_csv(final_csv_file_name, list_of_lists=data,
