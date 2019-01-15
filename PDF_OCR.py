@@ -30,7 +30,6 @@ class PDF:
     def create_temp_folder(folder_name):
         if os.path.exists(folder_name):
             shutil.rmtree(folder_name)
-            # os.system("rm -rf {}".format(folder_name))
         os.makedirs(folder_name)
 
     # Convert PDF to images
@@ -89,67 +88,100 @@ class PDF:
 class TextFile:
     def __init__(self, file_name):
         self.file_name = file_name
+        self.edited_file_name = self.file_name.split('.')[0] + '_new' + '.txt'
 
     def read_lines(self):
-        txt = open(self.file_name, 'r', encoding='utf-8').readlines()
+        txt = open(self.edited_file_name, 'r', encoding='utf-8').readlines()
         return txt
 
-    # This method is customized to specific files
-    def raw_file_corrector(self, lines):
+    #####################################################################################
 
-        # Remove '=' from lines
-        for i, line in enumerate(lines):
-            if '=' in line:
-                lines[i] = lines[i].replace('=', '')
+    def clean_file(self):
 
-        # # to remove the lines before the state (1 or 2)
-        for i, line in enumerate(lines):
-            matcher = re.findall("\n[A-Z][A-Z]\n", line)
-            if len(matcher) > 0 and lines[i - 1] == '\n':
-                if lines[i - 1] == '\n' and lines[i - 2] == '\n':
-                    del lines[i - 1]
-                    del lines[i - 1]
-                else:
-                    del lines[i - 1]
+        txt = open(self.file_name, 'r').readlines()
+        new_txt = []
+        for i, item in enumerate(txt):
 
+            # Remove '='
+            if '=' in item:
+                item = item.replace('=', '')
 
-        # To remove the line between zipcode and state
-        # for i, line in enumerate(lines):
-        #     matcher = re.findall("\n\n[\d]+", line)
-        #     if len(matcher) > 0 and lines[i - 1] == '\n' and lines[i - 2] == '\n' and lines[i - 3][-2:] in states:
-        #         del lines[i - 1]
-        #         lines[i - 2] = lines[i - 2].replace('\n', ' ')
+            # Remove '\n
+            if item.endswith('\n'):
+                item = item[:-1]
 
-        # To remove the empty line between the last line in the group that includes the city and the above
-        # for i, line in enumerate(lines):
-        #     matcher = re.findall(",\s\w\w\s\d\d\d\d\d", line)
-        #     if len(matcher) > 0 and lines[i - 1] == '\n':
-        #         del lines[i - 1]
+            # Remove numbers alone in the line
+            matcher = re.findall("^\d{1,2}\.", item)
+            if len(matcher) > 0:
+                item = item[len(matcher[0]) + 1:]
 
-        # To remove the empty line between the company name and the rest of the group
-        # for i, line in enumerate(lines):
-        #     matcher = re.findall(",\s\w\w\s\d\d\d\d\d", line)
-        #     if len(matcher) > 0 and lines[i - 2] == '\n':
-        #         del lines[i - 2]
+            # Replace 'EXHIBIT' with empty line
+            if item.strip() and len(item) > 2:
+                matcher1 = re.findall("EXHIBIT", item)
+                matcher2 = re.findall("Exhibit", item)
+                if len(matcher1) > 0 or len(matcher2):
+                    item = ''
 
+                # Replace 'page' with empty line
+                matcher = re.findall("PAGE", item)
+                if len(matcher) > 0:
+                    item = ''
 
-        # Print lines
-        # for line in lines:
-        #     print(line)
-        #
-        return lines
+                new_txt.append(item)
+
+        # Add line after the last line in the gorup
+        final_txt = []
+        for i, item in enumerate(new_txt):
+
+            # concatenate the separated zip code
+            matcher = re.findall("[.,]?\s\w\w[.,]?\s{1,2}\d+", item)
+
+            print('this', item, new_txt)
+            if i < len(new_txt) - 2:
+                next_matcher = re.findall("^\d+$", new_txt[i + 1])
+                if item.endswith('-') and len(next_matcher) > 0:
+                    item = item + new_txt[i + 1]
+                    new_txt[i + 1] = ''
+
+            # Add separator line
+            if len(matcher) > 0:
+                final_txt.append(item)
+                final_txt.append('')
+            else:
+                final_txt.append(item)
+
+        # TODO: Remove
+        for item in final_txt:
+            if item !='':
+                item = item + "\n"
+
+        # final_final_txt
+        # for item in final_txt:
+        #     print(item)
+
+        with open(self.edited_file_name, 'w') as output:
+            for item in final_txt:
+                output.write(item)
+                output.write('\n')
+
+        print(final_txt)
+        return final_txt
+
+    #####################################################################################
+
 
     def get_text_groups(self, lines, number_of_lines, line_max_length):
         min_number_lines, max_number_lines = number_of_lines
-        new_line_indices = [i for i, e in enumerate(lines) if e == '\n']
+        new_line_indices = [i for i, e in enumerate(lines) if e == '']
 
         groups = []
         for i in range(len(new_line_indices) - 1):
             if min_number_lines + 1 <= new_line_indices[i + 1] - new_line_indices[i] <= max_number_lines + 1:
+                print(lines)
                 group = lines[new_line_indices[i] + 1: new_line_indices[i + 1]]
-
+                print(group)
                 # Remove \n from the end of each line
-                group = [item[:-1] for item in group]
+                # group = [item[:-1] for item in group]
 
                 # Check line length in each group
                 lengths_of_lines = [len(line) for line in group]
@@ -157,6 +189,7 @@ class TextFile:
                 if max(lengths_of_lines) <= line_max_length:
                     groups.append(group)
 
+        print(groups)
         return groups
 
     def concatenate_groups(self, groups):
@@ -194,7 +227,7 @@ class TextFile:
             for line in group:
                 line = line.strip()
                 group_check = False
-                findings = re.findall(",\s\w\w[.,]?\s\d\d\d\d", line)
+                findings = re.findall("[.,]?\s\w\w[.,]?\s{1,2}\d+", line)   # [.,]?\s\w\w[.,]?\s{1,2}\d+        ## ,\s\w\w[.,]?\s\d\d\d\d
                 try:
                     State = re.findall("[A-Z][A-Z]", line)
                     State = State[0].strip()
@@ -202,16 +235,21 @@ class TextFile:
                     pass
 
                 if len(findings) > 0 and State in states:
+                    print(line, findings)
                     try:
                         Zipcode = re.findall("\d\d\d\d\d", line)[0]
                     except:
                         Zipcode = re.findall("\d\d\d\d", line)[0]
 
-                    if len(re.findall("\d\d\d\d\d-", line)) > 0:
+                    if len(re.findall("\d+-\d+", line)) > 0:
                         Zipcode = re.findall("\d+-\d+", line)[0]
 
-                    comma_index = line.index(',')
-                    City = line[0:comma_index]
+                    try:
+                        comma_index = line.index(',')
+                        City = line[0:comma_index]
+                    except:
+                        comma_index = line.index(State)
+                        City = line[0:comma_index]
 
                     group_check = True
 
@@ -268,8 +306,8 @@ class TextFile:
 
             if group_check == True:
                 group_data = [ResCompanyName, ResFirstName, ResLastName, Address1, Address2, City, State, Zipcode]
-                # print(group_data)
-                group_data = [item[1:] if item != None and item[0] == '-' else item for item in group_data]
+                print('here', group_data)
+                # group_data = [item[1:] if item != None and item[0] == '-' else item for item in group_data]
                 groups_data.append(group_data)
 
         return groups_data
@@ -307,7 +345,6 @@ def concatenate_CSVs(folder_name):
 
 def get_pdfs():
     cwd = os.getcwd()
-    # cwd = os.path.abspath(os.pardir)
     PDFs = os.listdir(cwd)
     pdfs = []
 
@@ -324,12 +361,8 @@ def get_pdfs():
 
     return pdfs
 
-
-## pdf_file.image_to_textPDF()
-## pdf_file.textPDF_to_text()
-
 if __name__ == '__main__':
-    version = '1.1'
+    version = '1.2'
     print('PDF_OCR version {} is running ...'.format(version), '\n')
 
     # # Process the PDF
@@ -345,17 +378,21 @@ if __name__ == '__main__':
         pdf_file.images_to_text()
         folder_name = pdf_file.temp_folder_name
 
+
+
         ###################################
 
         # Get info from text file
         for item in os.listdir(folder_name):
             if item.endswith('txt'):
                 txt_file = TextFile('{}//{}'.format(folder_name, item))
-                lines = txt_file.read_lines()
+                # lines = txt_file.read_lines()
 
-                corrected_lines = txt_file.raw_file_corrector(lines)
+                # corrected_lines = txt_file.raw_file_corrector(lines)
 
-                groups = txt_file.get_text_groups(corrected_lines, [3, 8], 50)
+                corrected_file = txt_file.clean_file()
+
+                groups = txt_file.get_text_groups(corrected_file, [3, 8], 50)
                 data = txt_file.get_company_data(groups)
                 final_csv_file_name = '{}//{}.csv'.format(folder_name, item.split('.')[0])
                 create_csv(final_csv_file_name, list_of_lists=data,
@@ -370,10 +407,10 @@ if __name__ == '__main__':
 
         #####################################
         # Delete the folder after creating the CSV
-        try:
-            shutil.rmtree(folder_name)
-        except:
-            continue
+        # try:
+        #     shutil.rmtree(folder_name)
+        # except:
+        #     continue
 
     #########################################
     print('__________________________________________________________')
