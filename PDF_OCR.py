@@ -1,16 +1,17 @@
 # -*- coding: utf-8 -*-
-from pdf2image import convert_from_path
 import subprocess
+import io
+import re
+import os
+import shutil
+
+from pdf2image import convert_from_path
 from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter
 from pdfminer.pdfpage import PDFPage
 from pdfminer.converter import XMLConverter, HTMLConverter, TextConverter
 from pdfminer.layout import LAParams
-import io
-import re
 import pandas as pd
-import os
 import numpy as np
-import shutil
 
 states = ['AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA', 'HI', 'ID',
           'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS',
@@ -36,7 +37,7 @@ class PDF:
     def PDF_to_images(self):
         self.create_temp_folder(self.temp_folder_name)
 
-        pages = convert_from_path(self.PDF_file_name) # Change resolution
+        pages = convert_from_path(self.PDF_file_name)  # Change resolution
 
         for i, page in enumerate(pages):
             page.save('{}//{}_{}.jpg'.format(self.temp_folder_name, self.file_name, i), 'JPEG')
@@ -111,7 +112,7 @@ class TextFile:
                 item = item[:-1]
 
             # Remove numbers alone in the line
-            matcher = re.findall("^\d{1,2}\.", item)
+            matcher = re.findall("^\d{1,3}\.", item)
             if len(matcher) > 0:
                 item = item[len(matcher[0]) + 1:]
 
@@ -136,7 +137,7 @@ class TextFile:
             # concatenate the separated zip code
             matcher = re.findall("[.,]?\s\w\w[.,]?\s{1,2}\d+", item)
 
-            print('this', item, new_txt)
+            # print('this', item, new_txt)
             if i < len(new_txt) - 2:
                 next_matcher = re.findall("^\d+$", new_txt[i + 1])
                 if item.endswith('-') and len(next_matcher) > 0:
@@ -151,9 +152,9 @@ class TextFile:
                 final_txt.append(item)
 
         # TODO: Remove
-        for item in final_txt:
-            if item !='':
-                item = item + "\n"
+        # for item in final_txt:
+        #     if item != '':
+        #         item = item + "\n"
 
         # final_final_txt
         # for item in final_txt:
@@ -164,11 +165,10 @@ class TextFile:
                 output.write(item)
                 output.write('\n')
 
-        print(final_txt)
+        # print(final_txt)
         return final_txt
 
     #####################################################################################
-
 
     def get_text_groups(self, lines, number_of_lines, line_max_length):
         min_number_lines, max_number_lines = number_of_lines
@@ -177,9 +177,9 @@ class TextFile:
         groups = []
         for i in range(len(new_line_indices) - 1):
             if min_number_lines + 1 <= new_line_indices[i + 1] - new_line_indices[i] <= max_number_lines + 1:
-                print(lines)
+                # print(lines)
                 group = lines[new_line_indices[i] + 1: new_line_indices[i + 1]]
-                print(group)
+                # print(group)
                 # Remove \n from the end of each line
                 # group = [item[:-1] for item in group]
 
@@ -189,7 +189,7 @@ class TextFile:
                 if max(lengths_of_lines) <= line_max_length:
                     groups.append(group)
 
-        print(groups)
+        print('The groups we have are: ', groups)
         return groups
 
     def concatenate_groups(self, groups):
@@ -227,15 +227,25 @@ class TextFile:
             for line in group:
                 line = line.strip()
                 group_check = False
-                findings = re.findall("[.,]?\s\w\w[.,]?\s{1,2}\d+", line)   # [.,]?\s\w\w[.,]?\s{1,2}\d+        ## ,\s\w\w[.,]?\s\d\d\d\d
+                findings = re.findall("[.,]?\s\w\w[.,]?\s{1,2}\d+", line)  # [.,]?\s\w\w[.,]?\s{1,2}\d+   ## ,\s\w\w[.,]?\s\d\d\d\d
+
+                if len(findings) < 1:
+                    print('This line is not identifier ', line)
+
+                else:
+                    print('The identifier is found: ', findings)
+
                 try:
-                    State = re.findall("[A-Z][A-Z]", line)
+                    State = re.findall("\s[A-Z]{2}\s", line)
                     State = State[0].strip()
                 except:
                     pass
 
-                if len(findings) > 0 and State in states:
-                    print(line, findings)
+                print('findings: ', findings, 'State:', State)
+
+                if len(findings) > 0 and State in states:       # and State in states
+                    print('Here we succeded ________________:', State)
+
                     try:
                         Zipcode = re.findall("\d\d\d\d\d", line)[0]
                     except:
@@ -256,10 +266,15 @@ class TextFile:
                     # Remove the empty line
                     group = group[:-1]
 
+                    print('Captured Group: ', group)
+
             # Check for Address1 and Address2
             for line in group:
-                if ('Box' or 'St.') in line:
+                if ('Box' or 'St.' or 'BOX') in line:
                     if 'Box' in line:
+                        Address1 = line
+
+                    elif 'BOX' in line:
                         Address1 = line
 
                     elif 'St.' in line:
@@ -284,7 +299,6 @@ class TextFile:
                     Address2 = line[comma_index + 2:]
                     if ', ' not in line:
                         Address2 = line[comma_index + 1:]
-
                     # remove the line
                     group.remove(line)
 
@@ -297,7 +311,6 @@ class TextFile:
                     find_number_in_beggining = re.findall("^[\d+]{2,}", line)
                     if len(find_number_in_beggining) > 0:
                         Address1 = line
-
                         # remove the line
                         group.remove(line)
 
@@ -306,8 +319,11 @@ class TextFile:
 
             if group_check == True:
                 group_data = [ResCompanyName, ResFirstName, ResLastName, Address1, Address2, City, State, Zipcode]
-                print('here', group_data)
+                # print('here', group_data)
                 # group_data = [item[1:] if item != None and item[0] == '-' else item for item in group_data]
+
+                print('Group: ', group)
+                print('Group Data: ', group_data)
                 groups_data.append(group_data)
 
         return groups_data
@@ -355,11 +371,12 @@ def get_pdfs():
         except:
             continue
 
-    if len(pdfs) ==0:
+    if len(pdfs) == 0:
         print('No PDFs in the directory')
         exit()
 
     return pdfs
+
 
 if __name__ == '__main__':
     version = '1.2'
@@ -379,7 +396,6 @@ if __name__ == '__main__':
         folder_name = pdf_file.temp_folder_name
 
 
-
         ###################################
 
         # Get info from text file
@@ -392,7 +408,7 @@ if __name__ == '__main__':
 
                 corrected_file = txt_file.clean_file()
 
-                groups = txt_file.get_text_groups(corrected_file, [3, 8], 50)
+                groups = txt_file.get_text_groups(corrected_file, [2, 8], 50)
                 data = txt_file.get_company_data(groups)
                 final_csv_file_name = '{}//{}.csv'.format(folder_name, item.split('.')[0])
                 create_csv(final_csv_file_name, list_of_lists=data,
